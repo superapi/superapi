@@ -39,9 +39,11 @@ var define, require;
 })();
 
 define("superapi/agent", 
-  ["exports"],
-  function(__exports__) {
+  ["./promise","exports"],
+  function(__dependency1__, __exports__) {
     "use strict";
+    var Promise = __dependency1__["default"];
+
     function Agent (agent) {
       if (!agent) {
         throw new Error("missing superagent or any api compatible agent.");
@@ -72,7 +74,7 @@ define("superapi/agent",
 
         var request = this.agent[method];
         if (!request) {
-          throw new Error("Unsupported method [" + method + "]");
+          throw new Error("Unsupported method <" + method + ">");
         }
 
         var _req = request(url, data);
@@ -133,7 +135,7 @@ define("superapi/agent",
           return;
         }
 
-        _req.auth(auth.user || "", auth.pass || "");
+        req.auth(auth.user || "", auth.pass || "");
       },
 
       handleResponse: function (request, response) {
@@ -165,9 +167,11 @@ define("superapi/agent",
     __exports__["default"] = Agent;
   });
 define("superapi/api", 
-  ["exports"],
-  function(__exports__) {
+  ["./promise","exports"],
+  function(__dependency1__, __exports__) {
     "use strict";
+    var Promise = __dependency1__["default"];
+
     function Api(config) {
       // create a hash-liked object where all the services handlers are registered
       this.api = Object.create(null);
@@ -384,6 +388,10 @@ define("superapi/api",
           this.middlewares = [];
         }
 
+        if (fn.setup) {
+          fn.setup(this);
+        }
+
         this.middlewares.push({
           name: name,
           fn: fn
@@ -424,22 +432,30 @@ define("superapi/api",
           });
         };
 
-        var iterator = Promise.resolve(middlewares.map(function (m, i) {
-          return function () {
-            return m.fn ? m.fn(req, next.bind(this, i), service) : null;
-          }
-        }));
+        var reducer = function (response, f) {
+          return Promise.resolve(response ? response : f())
+            .then(function (data) {
+              return data ? data : response;
+            })
+            .catch(function (error) {
+              if (response) {
+                return response;
+              }
+              throw error;
+            });
+        }
 
-        return iterator.reduce(function (response, f) {
-          return response ? response : Promise.resolve(f()).then(function (data) {
-            return data ? data : response;
-          }).catch(function (error) {
-            if (response) {
-              return response;
-            }
-            throw error;
-          });
-        }, null);
+        return Promise.reduce(reducer, null)(
+          middlewares
+            .filter(function (m) {
+              return m.fn
+            })
+            .map(function (m, i) {
+              return function () {
+                return m.fn(req, next.bind(this, i), service);
+              }
+            })
+        );
       }
     };
 
@@ -525,10 +541,40 @@ define("superapi/middlewares/trace",
       };
     };
   });
-define("superapi/service-handler", 
+define("superapi/promise", 
   ["exports"],
   function(__exports__) {
     "use strict";
+    Promise.reduce = function reduce(fn, start) {
+      return function(val) {
+        val = Array.isArray(val) ? val : [val]
+
+        const length = val.length;
+
+        if (length === 0) {
+          return Promise.resolve(start);
+        }
+
+        return val.reduce(function (promise, curr, index, arr) {
+          return promise.then(function (prev) {
+            if (prev === undefined && length === 1) {
+              return curr;
+            }
+
+            return fn(prev, curr, index, arr)
+          })
+        }, Promise.resolve(start))
+      }
+    }
+
+    __exports__["default"] = Promise
+  });
+define("superapi/service-handler", 
+  ["./promise","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var Promise = __dependency1__["default"];
+
     __exports__["default"] = function serviceHandler (sid) {
       /*
        * Below are the supported options for the serviceHandler:
@@ -603,10 +649,6 @@ define("superapi",
     var serviceHandler = __dependency3__["default"];
     var status = __dependency4__["default"];
 
-    function superapi(config) {
-      return new Api(config);
-    }
-
     Api.defaults = {
       agent: Agent,
       serviceHandler: serviceHandler,
@@ -614,6 +656,11 @@ define("superapi",
         status: status
       }
     };
+
+    function superapi(config) {
+      return new Api(config);
+    }
+
 
     superapi.prototype.Api = Api;
 

@@ -1,4 +1,6 @@
 "use strict";
+var Promise = require("./promise")["default"];
+
 exports["default"] = function serviceHandler (sid) {
   /*
    * Below are the supported options for the serviceHandler:

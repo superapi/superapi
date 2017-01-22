@@ -1,4 +1,6 @@
 "use strict";
+var Promise = require("./promise")["default"];
+
 function Agent (agent) {
   if (!agent) {
     throw new Error("missing superagent or any api compatible agent.");
@@ -29,7 +31,7 @@ Agent.prototype = {
 
     var request = this.agent[method];
     if (!request) {
-      throw new Error("Unsupported method [" + method + "]");
+      throw new Error("Unsupported method <" + method + ">");
     }
 
     var _req = request(url, data);
@@ -90,7 +92,7 @@ Agent.prototype = {
       return;
     }
 
-    _req.auth(auth.user || "", auth.pass || "");
+    req.auth(auth.user || "", auth.pass || "");
   },
 
   handleResponse: function (request, response) {
